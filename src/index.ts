@@ -2,7 +2,10 @@ import express from "express";
 import type { RequestHandler } from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
-import { chromium } from "playwright";
+import puppeteer from "puppeteer-extra";
+import { Page } from "puppeteer";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+
 import type { DataType } from "./types";
 import { delay } from "./utils";
 const app = express();
@@ -12,35 +15,56 @@ app.use(bodyParser.json());
 let accumulatedLinks: { amazonURL: string; id: number }[] = [];
 let latestTimestamp: number = 0;
 
-const runPlaywright = async () => {
-  const browser = await chromium.launch({ headless: true });
+puppeteer.use(StealthPlugin());
+
+const getPageNumber = async (page: Page, tryCount: number = 1) => {
+  try {
+    await page.waitForSelector(".s-pagination-item", { timeout: 2000 });
+
+    const maxPage = await page.$$eval(
+      ".s-pagination-item:not(.s-pagination-previous):not(.s-pagination-next)",
+      (items) => {
+        const numbers = items
+          .map((el) => parseInt(el.textContent?.trim() || "0"))
+          .filter((n) => !isNaN(n));
+
+        return numbers.length ? Math.max(...numbers) : 1;
+      }
+    );
+
+    return maxPage;
+  } catch (err) {
+    console.log("failed", tryCount);
+    // if (tryCount >= 3) {
+    return 1;
+    // }
+    // return getPageNumber(page, tryCount + 1);
+  }
+};
+
+const runPuppeteer = async () => {
+  const browser = await puppeteer.launch({
+    headless: false, // Set false for debugging
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
   const page = await browser.newPage();
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+  );
+
+  await page.setViewport({ width: 1280, height: 800 });
+  await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
+
   const result: { id: number; pageCount: number }[] = [];
 
   for (let i = 0; i < accumulatedLinks.length; i++) {
     const { amazonURL, id } = accumulatedLinks[i];
-    try {
-      await delay(0.2);
-      await page.goto(amazonURL, { waitUntil: "domcontentloaded" });
-
-      const maxPage = await page.$$eval(
-        ".s-pagination-item:not(.s-pagination-previous):not(.s-pagination-next)",
-        (items) => {
-          const numbers = items
-            .map((el) => parseInt(el.textContent?.trim() || "0"))
-            .filter((n) => !isNaN(n));
-
-          return numbers.length ? Math.max(...numbers) : 1;
-        }
-      );
-
-      console.log("maxPage", maxPage, amazonURL);
-      result.push({ id, pageCount: maxPage });
-    } catch (error) {
-      console.error("Error scraping:", error);
-      await delay(0.5);
-      i--;
-    }
+    await page.goto(amazonURL, { waitUntil: "domcontentloaded" });
+    // await delay(3);
+    const pageNum = await getPageNumber(page);
+    console.log(i, id, pageNum, amazonURL);
+    result.push({ id, pageCount: pageNum });
   }
 
   await browser.close();
@@ -72,7 +96,7 @@ const scrapeHandler: RequestHandler = async (req, res) => {
   }
 
   try {
-    const result = await runPlaywright();
+    const result = await runPuppeteer();
 
     res.json(result);
   } catch (error) {

@@ -44,8 +44,12 @@ const getPageNumber = async (page: Page, tryCount: number = 1) => {
 
 const runPuppeteer = async () => {
   const browser = await puppeteer.launch({
-    headless: false, // Set false for debugging
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    headless: true, // Set false for debugging
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-blink-features=AutomationControlled",
+    ],
   });
 
   const page = await browser.newPage();
@@ -56,12 +60,26 @@ const runPuppeteer = async () => {
   await page.setViewport({ width: 1280, height: 800 });
   await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
 
+  await page.setRequestInterception(true);
+
+  page.on("request", (request) => {
+    if (["image", "stylesheet", "font"].includes(request.resourceType())) {
+      request.abort();
+    } else {
+      request.continue();
+    }
+  });
+
   const result: { id: number; pageCount: number }[] = [];
+  const mytimestamp = latestTimestamp;
 
   for (let i = 0; i < accumulatedLinks.length; i++) {
+    if (mytimestamp !== latestTimestamp) {
+      break;
+    }
     const { amazonURL, id } = accumulatedLinks[i];
-    await page.goto(amazonURL, { waitUntil: "domcontentloaded" });
-    // await delay(3);
+    await page.goto(amazonURL, { waitUntil: "networkidle2" });
+    await delay(1 + Math.random() * 2);
     const pageNum = await getPageNumber(page);
     console.log(i, id, pageNum, amazonURL);
     result.push({ id, pageCount: pageNum });

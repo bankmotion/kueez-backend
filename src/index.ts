@@ -12,7 +12,6 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-let accumulatedLinks: { amazonURL: string; id: number }[] = [];
 let latestTimestamp: number = 0;
 
 puppeteer.use(StealthPlugin());
@@ -42,7 +41,9 @@ const getPageNumber = async (page: Page, tryCount: number = 1) => {
   }
 };
 
-const runPuppeteer = async () => {
+const runPuppeteer = async (
+  amazonURLs: { amazonURL: string; id: number }[]
+) => {
   const browser = await puppeteer.launch({
     headless: true, // Set false for debugging
     args: [
@@ -73,11 +74,11 @@ const runPuppeteer = async () => {
   const result: { id: number; pageCount: number }[] = [];
   const mytimestamp = latestTimestamp;
 
-  for (let i = 0; i < accumulatedLinks.length; i++) {
+  for (let i = 0; i < amazonURLs.length; i++) {
     if (mytimestamp !== latestTimestamp) {
       break;
     }
-    const { amazonURL, id } = accumulatedLinks[i];
+    const { amazonURL, id } = amazonURLs[i];
     await page.goto(amazonURL, { waitUntil: "networkidle2" });
     await delay(1 + Math.random() * 2);
     const pageNum = await getPageNumber(page);
@@ -90,31 +91,25 @@ const runPuppeteer = async () => {
 };
 
 const scrapeHandler: RequestHandler = async (req, res) => {
-  const { amazonURLs, isFinal, currentTimestamp } = req.body as {
+  const { amazonURLs, currentTimestamp } = req.body as {
     amazonURLs: {
       amazonURL: string;
       id: number;
     }[];
-    isFinal: boolean;
     currentTimestamp: number;
   };
-  console.log({ amazonURLs, isFinal, currentTimestamp });
+  console.log({ amazonURLs, currentTimestamp });
 
   if (currentTimestamp > latestTimestamp) {
     latestTimestamp = currentTimestamp;
-    accumulatedLinks = [];
-  }
-
-  accumulatedLinks.push(...amazonURLs);
-  console.log(`Accumulated links: ${accumulatedLinks.length}`);
-
-  if (!isFinal) {
-    res.json({});
+    res.json([]);
     return;
   }
 
+  console.log(`amazonURLs links: ${amazonURLs.length}`);
+
   try {
-    const result = await runPuppeteer();
+    const result = await runPuppeteer(amazonURLs);
 
     res.json(result);
   } catch (error) {

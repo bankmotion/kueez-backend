@@ -1,14 +1,22 @@
 import express from "express";
+import https from "https";
 import type { RequestHandler } from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import puppeteer from "puppeteer-extra";
 import { Page } from "puppeteer";
+import fs from "fs";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
 import type { DataType } from "./types";
 import { delay } from "./utils";
 const app = express();
+
+const options = {
+  key: fs.readFileSync("server.key"),
+  cert: fs.readFileSync("server.cert"),
+};
+
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -120,6 +128,6 @@ const scrapeHandler: RequestHandler = async (req, res) => {
 
 app.post("/api/scrape", scrapeHandler);
 
-app.listen(3000, () => {
+https.createServer(options, app).listen(3000, () => {
   console.log("Server is running on port 3000");
 });

@@ -80,7 +80,7 @@ const runPuppeteer = async (
     }
     const { amazonURL, id } = amazonURLs[i];
     await page.goto(amazonURL, { waitUntil: "networkidle2" });
-    await delay(1 + Math.random() * 2);
+    await delay(Math.random() * 2);
     const pageNum = await getPageNumber(page);
     console.log(i, id, pageNum, amazonURL);
     result.push({ id, pageCount: pageNum });

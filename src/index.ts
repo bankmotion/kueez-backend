@@ -1,5 +1,6 @@
 import express from "express";
 import https from "https";
+import path from "path";
 import type { RequestHandler } from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
@@ -13,8 +14,8 @@ import { delay } from "./utils";
 const app = express();
 
 const options = {
-  key: fs.readFileSync("server.key"),
-  cert: fs.readFileSync("server.cert"),
+  key: fs.readFileSync(path.join(__dirname, "cert", "server.key")),
+  cert: fs.readFileSync(path.join(__dirname, "cert", "server.cert")),
 };
 
 app.use(cors());
@@ -59,6 +60,7 @@ const runPuppeteer = async (
       "--disable-setuid-sandbox",
       "--disable-blink-features=AutomationControlled",
     ],
+    executablePath: "/usr/bin/chromium-browser",
   });
 
   const page = await browser.newPage();
@@ -127,6 +129,10 @@ const scrapeHandler: RequestHandler = async (req, res) => {
 };
 
 app.post("/api/scrape", scrapeHandler);
+
+app.get("/api/test", (req, res) => {
+  res.json({ message: "Hello, world!" });
+});
 
 https.createServer(options, app).listen(3000, () => {
   console.log("Server is running on port 3000");
